@@ -9,12 +9,16 @@ import type { DocumentPageRow, ProcessingJobRow } from '@/types/database';
 
 const PAGE_BATCH_SIZE = 15;
 const VISION_SUBBATCH_SIZE = 8;
-const EMBED_BATCH_SIZE = 40;
+// 40 chunks reales (hasta ~900 tokens cada uno) pueden sumar decenas de
+// miles de tokens en una sola llamada y superar el límite de
+// tokens-por-minuto del nivel gratuito de Gemini -- confirmado en uso
+// real con un documento de 208 páginas. Un lote más chico da margen.
+const EMBED_BATCH_SIZE = 10;
 const MAX_RETRIES = 3;
 
 export type TickResult =
   | { processed: false }
-  | { processed: true; documentId: string; stage: string; done: boolean };
+  | { processed: true; documentId: string; stage: string; done: boolean; error?: string };
 
 async function downloadPdfBytes(storagePath: string): Promise<Uint8Array> {
   const supabase = getSupabaseAdmin();
@@ -60,8 +64,19 @@ export async function processNextJobBatch(): Promise<TickResult> {
     return { processed: true, documentId: job.document_id, stage, done };
   } catch (err) {
     await handleJobError(job, err);
-    return { processed: true, documentId: job.document_id, stage: job.current_stage ?? 'starting', done: false };
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      processed: true,
+      documentId: job.document_id,
+      stage: job.current_stage ?? 'starting',
+      done: false,
+      error: message,
+    };
   }
+}
+
+function isRateLimitError(message: string): boolean {
+  return message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429');
 }
 
 async function handleJobError(job: ProcessingJobRow, err: unknown) {
@@ -69,7 +84,14 @@ async function handleJobError(job: ProcessingJobRow, err: unknown) {
   const message = err instanceof Error ? err.message : String(err);
   const retryCount = job.retry_count + 1;
 
-  if (retryCount >= MAX_RETRIES) {
+  // Un 429 de cuota de Gemini no es un error del pipeline -- reintentar 3
+  // veces en segundos no le da tiempo a la cuota a recuperarse (las
+  // cuotas por minuto suelen resetear en ~60s). Se reintenta con un
+  // límite mucho más alto en vez de marcar el documento como fallido
+  // casi de inmediato.
+  const effectiveMaxRetries = isRateLimitError(message) ? MAX_RETRIES * 20 : MAX_RETRIES;
+
+  if (retryCount >= effectiveMaxRetries) {
     await supabase
       .from('processing_jobs')
       .update({ status: 'failed', retry_count: retryCount, error_message: message })
@@ -181,10 +203,18 @@ async function runExtractingPages(job: ProcessingJobRow): Promise<boolean> {
     }
   }
 
-  if (rowsToUpsert.length > 0) {
+  // Gemini a veces devuelve una página duplicada en la transcripción por
+  // visión (p.ej. dos entradas con el mismo page_number). Postgres no
+  // permite que un upsert afecte la misma fila dos veces en el mismo
+  // batch ("ON CONFLICT DO UPDATE command cannot affect row a second
+  // time"), así que se deduplica antes de enviar -- se queda con la
+  // última ocurrencia.
+  const dedupedRows = [...new Map(rowsToUpsert.map((r) => [r.page_number, r])).values()];
+
+  if (dedupedRows.length > 0) {
     const { error: upsertError } = await supabase
       .from('document_pages')
-      .upsert(rowsToUpsert, { onConflict: 'document_id,page_number' });
+      .upsert(dedupedRows, { onConflict: 'document_id,page_number' });
     if (upsertError) throw new Error(upsertError.message);
   }
 
@@ -234,9 +264,13 @@ async function runChunking(job: ProcessingJobRow): Promise<boolean> {
       content_hash: c.contentHash,
       token_count: c.tokenCount,
     }));
+    // Párrafos idénticos repetidos en el documento (encabezados, pies de
+    // página) pueden generar el mismo content_hash -- mismo problema de
+    // upsert que en document_pages, se deduplica antes de enviar.
+    const dedupedRows = [...new Map(rows.map((r) => [r.content_hash, r])).values()];
     const { error: insertError } = await supabase
       .from('document_chunks')
-      .upsert(rows, { onConflict: 'document_id,content_hash' });
+      .upsert(dedupedRows, { onConflict: 'document_id,content_hash' });
     if (insertError) throw new Error(insertError.message);
   }
 

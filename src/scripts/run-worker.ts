@@ -27,7 +27,11 @@ async function main() {
       console.log('No hay jobs en cola. Saliendo.');
       break;
     }
-    console.log(`[${result.documentId}] etapa=${result.stage} done=${result.done}`);
+    if (result.error) {
+      console.log(`[${result.documentId}] etapa=${result.stage} ERROR: ${result.error}`);
+    } else {
+      console.log(`[${result.documentId}] etapa=${result.stage} done=${result.done}`);
+    }
   }
 
   console.log('Worker terminado.');
