@@ -10,9 +10,11 @@ export const aiConfig = {
    * withGemini() en gemini.ts.
    */
   apiKeys: (): string[] => {
-    const keys = [process.env.GOOGLE_AI_API_KEY, process.env.GOOGLE_AI_API_KEY_2].filter(
-      (k): k is string => Boolean(k),
-    );
+    const keys = [
+      process.env.GOOGLE_AI_API_KEY,
+      process.env.GOOGLE_AI_API_KEY_2,
+      process.env.GOOGLE_AI_API_KEY_3,
+    ].filter((k): k is string => Boolean(k));
     if (keys.length === 0) {
       throw new Error('Falta la variable de entorno GOOGLE_AI_API_KEY');
     }

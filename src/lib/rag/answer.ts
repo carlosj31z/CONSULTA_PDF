@@ -1,5 +1,6 @@
 import { Type } from '@google/genai';
 import { withGemini, aiConfig } from '@/lib/ai/gemini';
+import { getGroqClient, groqConfig } from '@/lib/ai/groq';
 import type { RetrievedChunk } from './retrieval';
 
 export interface AnswerSource {
@@ -16,6 +17,16 @@ export interface AnswerResult {
   confidence: number;
   sources: AnswerSource[];
   /** Resumen del razonamiento real del modelo (Gemini thinking), si lo hubo. */
+  reasoning: string | null;
+  /** true si Gemini falló (todas las keys agotadas) y respondió Groq de respaldo. */
+  usedFallbackProvider: boolean;
+}
+
+interface RawModelResult {
+  answer: string;
+  found_in_documents: boolean;
+  confidence: number;
+  sources: { source_index: number; quote: string }[];
   reasoning: string | null;
 }
 
@@ -61,6 +72,17 @@ estrictas:
 5. Si hay conversación previa, úsala solo para entender referencias
    ("eso", "el anterior") -- no como fuente de información factual.`;
 
+const GROQ_JSON_INSTRUCTIONS = `
+
+Responde ÚNICAMENTE con un objeto JSON (sin texto antes ni después) con
+EXACTAMENTE estas claves:
+{
+  "answer": "string con la respuesta",
+  "found_in_documents": true o false,
+  "confidence": numero entre 0 y 1,
+  "sources": [{ "source_index": numero de la fuente citada, "quote": "cita textual exacta" }]
+}`;
+
 function buildContextBlock(chunks: RetrievedChunk[], documentTitles: Map<string, string>): string {
   return chunks
     .map((c, i) => {
@@ -70,6 +92,65 @@ function buildContextBlock(chunks: RetrievedChunk[], documentTitles: Map<string,
       return `[Fuente ${i + 1}] Documento: "${title}" | ${pages}${location ? ` | ${location}` : ''}\n${c.content}`;
     })
     .join('\n\n---\n\n');
+}
+
+async function callGemini(prompt: string): Promise<RawModelResult> {
+  const result = await withGemini((ai) =>
+    ai.models.generateContent({
+      model: aiConfig.models.pro,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: RESPONSE_SCHEMA,
+        // Razonamiento real (no simulado): Gemini expone un resumen de su
+        // propio proceso de pensamiento antes de la respuesta final.
+        // result.text ya excluye las partes de "thought" automáticamente,
+        // así que el parseo del JSON de abajo no se ve afectado.
+        thinkingConfig: { includeThoughts: true },
+      },
+    }),
+  );
+
+  const thoughtParts =
+    result.candidates?.[0]?.content?.parts?.filter((p) => p.thought && p.text) ?? [];
+  const reasoning = thoughtParts.length > 0 ? thoughtParts.map((p) => p.text).join('\n\n') : null;
+
+  const raw = result.text;
+  if (!raw) throw new Error('Gemini no devolvió una respuesta');
+
+  const parsed = JSON.parse(raw) as Omit<RawModelResult, 'reasoning'>;
+  return { ...parsed, reasoning };
+}
+
+/**
+ * Respaldo de ÚLTIMO recurso cuando TODAS las API keys de Gemini fallan
+ * (p.ej. cuota diaria agotada en las tres). Groq no ofrece un resumen de
+ * razonamiento como Gemini -- reasoning siempre es null aquí, no se
+ * simula uno falso.
+ */
+async function callGroq(prompt: string): Promise<RawModelResult> {
+  if (!groqConfig.isConfigured()) {
+    throw new Error('Groq no está configurado (falta la variable de entorno GROQ_API_KEY)');
+  }
+
+  const client = getGroqClient();
+  const completion = await client.chat.completions.create({
+    model: groqConfig.model,
+    messages: [{ role: 'user', content: prompt + GROQ_JSON_INSTRUCTIONS }],
+    response_format: { type: 'json_object' },
+  });
+
+  const raw = completion.choices[0]?.message?.content;
+  if (!raw) throw new Error('Groq no devolvió contenido');
+
+  const parsed = JSON.parse(raw) as Partial<Omit<RawModelResult, 'reasoning'>>;
+  return {
+    answer: parsed.answer ?? '',
+    found_in_documents: Boolean(parsed.found_in_documents),
+    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+    sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+    reasoning: null,
+  };
 }
 
 export async function generateAnswer(params: {
@@ -96,35 +177,20 @@ ${contextBlock}
 
 Pregunta del usuario: ${question}`;
 
-  const result = await withGemini((ai) =>
-    ai.models.generateContent({
-      model: aiConfig.models.pro,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: RESPONSE_SCHEMA,
-        // Razonamiento real (no simulado): Gemini expone un resumen de su
-        // propio proceso de pensamiento antes de la respuesta final.
-        // result.text ya excluye las partes de "thought" automáticamente,
-        // así que el parseo del JSON de abajo no se ve afectado.
-        thinkingConfig: { includeThoughts: true },
-      },
-    }),
-  );
-
-  const thoughtParts =
-    result.candidates?.[0]?.content?.parts?.filter((p) => p.thought && p.text) ?? [];
-  const reasoning = thoughtParts.length > 0 ? thoughtParts.map((p) => p.text).join('\n\n') : null;
-
-  const raw = result.text;
-  if (!raw) throw new Error('Gemini no devolvió una respuesta');
-
-  const parsed = JSON.parse(raw) as {
-    answer: string;
-    found_in_documents: boolean;
-    confidence: number;
-    sources: { source_index: number; quote: string }[];
-  };
+  let parsed: RawModelResult;
+  let usedFallbackProvider = false;
+  try {
+    parsed = await callGemini(prompt);
+  } catch (geminiErr) {
+    try {
+      parsed = await callGroq(prompt);
+      usedFallbackProvider = true;
+    } catch (groqErr) {
+      const geminiMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+      const groqMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+      throw new Error(`Gemini falló (${geminiMsg}) y el respaldo Groq también falló (${groqMsg})`);
+    }
+  }
 
   // Validación de grounding: una cita solo se acepta si el texto existe
   // LITERALMENTE dentro del chunk que dice citar. Si el modelo alucinó
@@ -148,6 +214,7 @@ Pregunta del usuario: ${question}`;
     foundInDocuments: parsed.found_in_documents,
     confidence: parsed.confidence,
     sources,
-    reasoning,
+    reasoning: parsed.reasoning,
+    usedFallbackProvider,
   };
 }

@@ -1,8 +1,7 @@
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import { DOCUMENTS_BUCKET, COVERS_BUCKET, coverPathFor } from '@/lib/documents/constants';
 import { openPdf, extractPageText, hasSufficientNativeText } from './pdf-reader';
-import { extractPagesAsPdf } from './pdf-split';
-import { transcribePagesWithVision } from './vision';
+import { transcribePagesRobust } from './vision';
 import { chunkPages, type PageForChunking } from './chunking';
 import { stripBoilerplate } from './boilerplate';
 import { embedTexts } from './embeddings';
@@ -77,8 +76,24 @@ export async function processNextJobBatch(): Promise<TickResult> {
   }
 }
 
-function isRateLimitError(message: string): boolean {
-  return message.includes('RESOURCE_EXHAUSTED') || message.includes('"code":429');
+const GENEROUS_MAX_RETRIES = MAX_RETRIES * 20;
+
+/**
+ * Errores donde reintentar NUNCA va a ayudar -- fallan rápido (3
+ * intentos) en vez de agotar 60 reintentos inútilmente. Todo lo demás
+ * (incluyendo tipos de error que todavía no hemos visto) se trata como
+ * potencialmente transitorio y se reintenta generosamente por defecto:
+ * la mayoría de los fallos reales que hemos visto en producción (cuota
+ * de Gemini agotada, "RECITATION", carreras de escritura concurrente)
+ * resultaron ser recuperables con suficientes reintentos, no errores
+ * permanentes del pipeline.
+ */
+function isPermanentError(message: string): boolean {
+  return (
+    message.includes('Object not found') || // archivo original borrado del Storage
+    message.includes('Documento no encontrado') || // fila de documents borrada a mitad de proceso
+    message.includes('Falta la variable de entorno') // config del servidor, no se arregla reintentando
+  );
 }
 
 async function handleJobError(job: ProcessingJobRow, err: unknown) {
@@ -86,12 +101,7 @@ async function handleJobError(job: ProcessingJobRow, err: unknown) {
   const message = err instanceof Error ? err.message : String(err);
   const retryCount = job.retry_count + 1;
 
-  // Un 429 de cuota de Gemini no es un error del pipeline -- reintentar 3
-  // veces en segundos no le da tiempo a la cuota a recuperarse (las
-  // cuotas por minuto suelen resetear en ~60s). Se reintenta con un
-  // límite mucho más alto en vez de marcar el documento como fallido
-  // casi de inmediato.
-  const effectiveMaxRetries = isRateLimitError(message) ? MAX_RETRIES * 20 : MAX_RETRIES;
+  const effectiveMaxRetries = isPermanentError(message) ? MAX_RETRIES : GENEROUS_MAX_RETRIES;
 
   if (retryCount >= effectiveMaxRetries) {
     await supabase
@@ -201,8 +211,7 @@ async function runExtractingPages(job: ProcessingJobRow): Promise<boolean> {
 
   for (let i = 0; i < needsVision.length; i += VISION_SUBBATCH_SIZE) {
     const subBatch = needsVision.slice(i, i + VISION_SUBBATCH_SIZE);
-    const subPdf = await extractPagesAsPdf(bytes, subBatch);
-    const visionResults = await transcribePagesWithVision(subPdf, subBatch);
+    const visionResults = await transcribePagesRobust(bytes, subBatch);
     for (const r of visionResults) {
       rowsToUpsert.push({
         document_id: job.document_id,
@@ -335,7 +344,14 @@ async function runEmbedding(job: ProcessingJobRow): Promise<boolean> {
     embedding: vectors[i],
     model_version: 'gemini-embedding-001',
   }));
-  const { error: insertError } = await supabase.from('document_embeddings').insert(rows);
+  // upsert, no insert: si dos ticks concurrentes (p.ej. dos pestañas, o
+  // el worker script + la UI a la vez) procesan el mismo lote de chunks
+  // pendientes, un insert plano falla con "duplicate key value violates
+  // unique constraint" en el segundo -- con upsert simplemente sobrescribe
+  // con el mismo embedding (mismo contenido, mismo resultado) sin error.
+  const { error: insertError } = await supabase
+    .from('document_embeddings')
+    .upsert(rows, { onConflict: 'chunk_id' });
   if (insertError) throw new Error(insertError.message);
 
   const totalDone = embeddedIds.size + batch.length;

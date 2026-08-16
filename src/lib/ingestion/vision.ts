@@ -1,5 +1,6 @@
 import { Type } from '@google/genai';
 import { withGemini, aiConfig } from '@/lib/ai/gemini';
+import { extractPagesAsPdf } from './pdf-split';
 import type { ChunkContentType } from '@/types/database';
 
 export interface VisionPageResult {
@@ -75,7 +76,15 @@ export async function transcribePagesWithVision(
 
   const raw = result.text;
   if (!raw) {
-    throw new Error('Gemini no devolvió contenido para la transcripción de páginas');
+    const candidate = result.candidates?.[0];
+    const details = {
+      finishReason: candidate?.finishReason,
+      promptFeedback: result.promptFeedback,
+      safetyRatings: candidate?.safetyRatings,
+    };
+    throw new Error(
+      `Gemini no devolvió contenido para la transcripción de páginas: ${JSON.stringify(details)}`,
+    );
   }
 
   const parsed = JSON.parse(raw) as {
@@ -87,4 +96,40 @@ export async function transcribePagesWithVision(
     contentType: p.content_type,
     text: p.text,
   }));
+}
+
+/**
+ * Igual que transcribePagesWithVision, pero resiliente: si el lote falla
+ * (p.ej. Gemini corta la respuesta con finishReason "RECITATION" -- pasa
+ * con textos legales/normativos que coinciden demasiado con material de
+ * entrenamiento), lo reintenta dividido en mitades más chicas en vez de
+ * bloquear el documento entero. Si una sola página sigue fallando, se
+ * marca como no transcribible y se sigue adelante -- nunca deja el
+ * documento atascado para siempre por una página problemática.
+ */
+export async function transcribePagesRobust(
+  originalPdfBytes: Uint8Array,
+  pageNumbers: number[],
+): Promise<VisionPageResult[]> {
+  const subPdf = await extractPagesAsPdf(originalPdfBytes, pageNumbers);
+
+  try {
+    return await transcribePagesWithVision(subPdf, pageNumbers);
+  } catch (err) {
+    if (pageNumbers.length === 1) {
+      const message = err instanceof Error ? err.message : String(err);
+      return [
+        {
+          pageNumber: pageNumbers[0],
+          contentType: 'text',
+          text: `[No se pudo transcribir esta página automáticamente: ${message}]`,
+        },
+      ];
+    }
+
+    const mid = Math.ceil(pageNumbers.length / 2);
+    const firstHalf = await transcribePagesRobust(originalPdfBytes, pageNumbers.slice(0, mid));
+    const secondHalf = await transcribePagesRobust(originalPdfBytes, pageNumbers.slice(mid));
+    return [...firstHalf, ...secondHalf];
+  }
 }

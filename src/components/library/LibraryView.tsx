@@ -182,6 +182,18 @@ export function LibraryView({
     }
   }
 
+  async function handleRetry(id: string) {
+    setError(null);
+    setDocuments((docs) =>
+      docs.map((d) => (d.id === id ? { ...d, status: 'processing', processing_error: null } : d)),
+    );
+    const res = await fetch(`/api/documents/${id}/retry`, { method: 'POST' });
+    if (!res.ok) {
+      setError('No se pudo reiniciar el procesamiento');
+    }
+    await refresh();
+  }
+
   const visibleDocuments = favoritesOnly ? documents.filter((d) => d.is_favorite) : documents;
 
   return (
@@ -245,6 +257,7 @@ export function LibraryView({
               onDelete={handleDelete}
               onToggleFavorite={handleToggleFavorite}
               onRename={handleRename}
+              onRetry={handleRetry}
             />
           ))}
         </div>

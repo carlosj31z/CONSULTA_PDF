@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files -- .env.local.example es la plantilla y SÍ debe commitearse,
+# .env* la excluía también por error (nunca llegó a GitHub).
 .env*
+!.env.local.example
 
 # vercel
 .vercel

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User, X } from 'lucide-react';
+import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User, X, Zap } from 'lucide-react';
 import { PdfViewerModal } from '@/components/viewer/PdfViewerModal';
 
 interface ChatSource {
@@ -20,6 +20,7 @@ interface ChatMessage {
   foundInDocuments?: boolean;
   sources?: ChatSource[];
   reasoning?: string | null;
+  usedFallbackProvider?: boolean;
 }
 
 interface ConversationSummary {
@@ -170,6 +171,7 @@ export function ChatView() {
           foundInDocuments: body.foundInDocuments,
           sources: body.sources,
           reasoning: body.reasoning,
+          usedFallbackProvider: body.usedFallbackProvider,
         },
       ]);
       if (isNewConversation) loadConversations();
@@ -262,6 +264,15 @@ export function ChatView() {
                       <BookOpen size={13} />
                     </div>
                     <div className="min-w-0 flex-1 text-sm text-stone-900 dark:text-stone-50">
+                      {m.usedFallbackProvider && (
+                        <span
+                          className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-400"
+                          title="Gemini no estaba disponible (cuota agotada) -- esta respuesta la generó el modelo de respaldo (Groq)."
+                        >
+                          <Zap size={11} />
+                          Generado con IA de respaldo
+                        </span>
+                      )}
                       {m.reasoning && <ReasoningBlock reasoning={m.reasoning} />}
                       <p className="whitespace-pre-wrap">{m.content}</p>
                       {m.sources && m.sources.length > 0 && (

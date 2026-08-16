@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { FileText, X, Star, MessageSquare, Pencil, Check } from 'lucide-react';
+import { FileText, X, Star, MessageSquare, Pencil, Check, RotateCcw } from 'lucide-react';
 import type { DocumentRow } from '@/types/database';
 import { formatBytes, formatDate } from '@/lib/utils/format';
 import { StatusBadge } from './StatusBadge';
@@ -23,11 +23,13 @@ export function DocumentCard({
   onDelete,
   onToggleFavorite,
   onRename,
+  onRetry,
 }: {
   document: DocumentRow;
   onDelete: (id: string) => void;
   onToggleFavorite?: (id: string, next: boolean) => void;
   onRename?: (id: string, title: string) => void;
+  onRetry?: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(document.title);
@@ -155,6 +157,17 @@ export function DocumentCard({
             </span>
           )}
         </div>
+
+        {document.status === 'error' && onRetry && (
+          <button
+            type="button"
+            onClick={() => onRetry(document.id)}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+          >
+            <RotateCcw size={14} />
+            Reintentar procesamiento
+          </button>
+        )}
 
         {document.status === 'processing' && (
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">

@@ -20,6 +20,7 @@ export interface ChatResult {
   confidence: number;
   sources: ChatSource[];
   reasoning: string | null;
+  usedFallbackProvider: boolean;
 }
 
 const NOT_FOUND_ANSWER =
@@ -86,6 +87,7 @@ export async function askQuestion(params: {
       confidence: 0,
       sources: [],
       reasoning: null,
+      usedFallbackProvider: false,
     };
   }
 
@@ -148,5 +150,6 @@ export async function askQuestion(params: {
       quote: s.quote,
     })),
     reasoning: result.reasoning,
+    usedFallbackProvider: result.usedFallbackProvider,
   };
 }
