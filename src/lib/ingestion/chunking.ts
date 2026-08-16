@@ -107,9 +107,11 @@ function splitIntoBlocks(pages: PageForChunking[]): Block[] {
 }
 
 function resolveContentType(blocks: Block[]): ChunkContentType {
-  const hints = new Set(blocks.map((b) => b.contentTypeHint).filter(Boolean));
-  if (hints.size === 0) return 'text';
-  if (hints.size === 1) return [...hints][0] as ChunkContentType;
+  // La ausencia de pista (páginas con texto nativo) cuenta como 'text',
+  // no se descarta -- si no, un chunk con 9 bloques de texto normal y 1
+  // bloque de una página-imagen quedaría mal etiquetado como 'image'.
+  const types = new Set(blocks.map((b) => b.contentTypeHint ?? 'text'));
+  if (types.size === 1) return [...types][0];
   return 'mixed';
 }
 

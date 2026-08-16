@@ -1,6 +1,10 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { getDocument, type PDFDocumentProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import {
+  getDocument,
+  GlobalWorkerOptions,
+  type PDFDocumentProxy,
+} from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 // Resuelto contra la raíz del proyecto (process.cwd()) en vez de
 // require.resolve: este módulo se ejecuta tanto dentro del bundler de
@@ -11,6 +15,14 @@ const STANDARD_FONT_DATA_URL = pathToFileURL(
   path.join(PDFJS_ROOT, 'standard_fonts') + path.sep,
 ).href;
 const CMAP_URL = pathToFileURL(path.join(PDFJS_ROOT, 'cmaps') + path.sep).href;
+
+// Bajo el bundler de Next.js (Turbopack/webpack) pdfjs-dist no logra
+// resolver su propio worker por ruta relativa al chunk empaquetado
+// ("Setting up fake worker failed"). Se le apunta explícitamente al
+// archivo real en node_modules.
+GlobalWorkerOptions.workerSrc = pathToFileURL(
+  path.join(PDFJS_ROOT, 'legacy', 'build', 'pdf.worker.mjs'),
+).href;
 
 /** Umbral mínimo de caracteres para considerar que una página tiene texto nativo útil. */
 const MIN_NATIVE_TEXT_CHARS = 30;
