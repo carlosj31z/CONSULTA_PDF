@@ -53,6 +53,7 @@ export interface DocumentPageRow {
   has_native_text: boolean;
   processing_method: PageProcessingMethod;
   raw_text: string | null;
+  content_type_hint: ChunkContentType | null;
   created_at: string;
 }
 

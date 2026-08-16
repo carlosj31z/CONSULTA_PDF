@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DocumentRow } from '@/types/database';
 import { getSupabaseBrowser } from '@/lib/supabase/browser';
 import { sha256Hex } from '@/lib/utils/format';
@@ -9,17 +9,50 @@ import { DocumentCard } from './DocumentCard';
 
 type UploadState = { fileName: string; stage: string } | null;
 
+const TICK_INTERVAL_MS = 2500;
+
 export function LibraryView({ initialDocuments }: { initialDocuments: DocumentRow[] }) {
   const [documents, setDocuments] = useState(initialDocuments);
   const [upload, setUpload] = useState<UploadState>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const tickingRef = useRef(false);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const res = await fetch('/api/documents');
     const body = await res.json();
     if (res.ok) setDocuments(body.documents);
-  }
+  }, []);
+
+  const hasActiveWork = documents.some((d) => d.status === 'pending' || d.status === 'processing');
+
+  // Mientras haya documentos pendientes/procesando, va avanzando el
+  // pipeline con ticks periódicos y refresca el estado. Se detiene solo
+  // cuando ningún documento necesita trabajo.
+  useEffect(() => {
+    if (!hasActiveWork) return;
+    let cancelled = false;
+
+    const runTick = async () => {
+      if (tickingRef.current || cancelled) return;
+      tickingRef.current = true;
+      try {
+        await fetch('/api/worker/tick', { method: 'POST' });
+        if (!cancelled) await refresh();
+      } catch {
+        // se reintenta en el siguiente intervalo
+      } finally {
+        tickingRef.current = false;
+      }
+    };
+
+    runTick();
+    const interval = setInterval(runTick, TICK_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [hasActiveWork, refresh]);
 
   async function handleFileSelected(file: File) {
     setError(null);

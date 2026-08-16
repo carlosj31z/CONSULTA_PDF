@@ -49,6 +49,15 @@ export function DocumentCard({
         )}
       </div>
 
+      {document.status === 'processing' && (
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-blue-500 transition-all"
+            style={{ width: `${document.processing_progress}%` }}
+          />
+        </div>
+      )}
+
       <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
         <span>{document.page_count ? `${document.page_count} páginas` : '— páginas'}</span>
         <span>{formatBytes(document.file_size_bytes)}</span>

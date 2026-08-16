@@ -75,6 +75,9 @@ create table document_pages (
   has_native_text    boolean not null default false,
   processing_method  text not null check (processing_method in ('text_extraction', 'vision')),
   raw_text           text,
+  -- Solo se rellena para páginas procesadas por visión: lo usa el chunking
+  -- para decidir el content_type de los chunks derivados de esta página.
+  content_type_hint  text check (content_type_hint in ('text', 'table', 'image', 'formula', 'mixed')),
   created_at         timestamptz not null default now(),
   unique (document_id, page_number)
 );
