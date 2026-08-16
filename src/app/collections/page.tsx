@@ -1,6 +1,8 @@
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import { CollectionsView } from '@/components/collections/CollectionsView';
 
+export const dynamic = 'force-dynamic';
+
 export default async function CollectionsPage() {
   const supabase = getSupabaseAdmin();
   const { data: collections, error } = await supabase

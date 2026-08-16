@@ -1,6 +1,12 @@
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import { LibraryView } from '@/components/library/LibraryView';
 
+// Sin esto, Next.js puede pre-renderizar esta página en build time y
+// servir esa foto congelada de la biblioteca a todo el mundo en vez de
+// consultar Supabase en cada visita -- confirmado con `next build`
+// (marcaba "/" como estático ○).
+export const dynamic = 'force-dynamic';
+
 function ConfigError({ message }: { message: string }) {
   return (
     <div className="flex flex-1 items-center justify-center p-6">

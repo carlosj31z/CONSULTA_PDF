@@ -1,6 +1,8 @@
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import { LibraryView } from '@/components/library/LibraryView';
 
+export const dynamic = 'force-dynamic';
+
 export default async function FavoritesPage() {
   const supabase = getSupabaseAdmin();
   const { data: documents, error } = await supabase
