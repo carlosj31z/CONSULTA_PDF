@@ -1,6 +1,5 @@
 import 'server-only';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -10,7 +9,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-let client: ReturnType<typeof createClient<Database>> | null = null;
+let client: SupabaseClient | null = null;
 
 /**
  * Cliente Supabase con service role. Server-only: acceso total a la base
@@ -18,10 +17,17 @@ let client: ReturnType<typeof createClient<Database>> | null = null;
  * (uso personal, sin autenticación) por lo que TODO el acceso a datos debe
  * pasar por rutas de servidor que usan este cliente — nunca exponer la
  * service role key al navegador.
+ *
+ * Nota: sin genérico `Database` a propósito — el tipado manual de ese
+ * genérico no encajaba con los tipos internos de supabase-js sin
+ * introspección real del esquema. Los resultados se tipan explícitamente
+ * en cada call site con las interfaces de `@/types/database`. Cuando el
+ * proyecto esté enlazado a Supabase, generar tipos reales con
+ * `supabase gen types typescript` y volver a introducir el genérico.
  */
 export function getSupabaseAdmin() {
   if (!client) {
-    client = createClient<Database>(
+    client = createClient(
       requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
       requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
       { auth: { persistSession: false } },

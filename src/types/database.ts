@@ -11,7 +11,7 @@ export type ChunkContentType = 'text' | 'table' | 'image' | 'formula' | 'mixed';
 export type ConversationScopeType = 'library' | 'document' | 'documents' | 'collection';
 export type MessageRole = 'user' | 'assistant';
 
-export interface Collection {
+export interface CollectionRow {
   id: string;
   name: string;
   description: string | null;
@@ -34,7 +34,7 @@ export interface DocumentRow {
   updated_at: string;
 }
 
-export interface ProcessingJob {
+export interface ProcessingJobRow {
   id: string;
   document_id: string;
   status: ProcessingJobStatus;
@@ -46,7 +46,7 @@ export interface ProcessingJob {
   updated_at: string;
 }
 
-export interface DocumentPage {
+export interface DocumentPageRow {
   id: string;
   document_id: string;
   page_number: number;
@@ -56,7 +56,7 @@ export interface DocumentPage {
   created_at: string;
 }
 
-export interface DocumentChunk {
+export interface DocumentChunkRow {
   id: string;
   document_id: string;
   parent_chunk_id: string | null;
@@ -72,14 +72,19 @@ export interface DocumentChunk {
   created_at: string;
 }
 
-export interface DocumentEmbedding {
+export interface DocumentEmbeddingRow {
   chunk_id: string;
   embedding: number[];
   model_version: string;
   created_at: string;
 }
 
-export interface Conversation {
+export interface CollectionDocumentRow {
+  collection_id: string;
+  document_id: string;
+}
+
+export interface ConversationRow {
   id: string;
   title: string | null;
   scope_type: ConversationScopeType;
@@ -88,7 +93,7 @@ export interface Conversation {
   updated_at: string;
 }
 
-export interface Message {
+export interface MessageRow {
   id: string;
   conversation_id: string;
   role: MessageRole;
@@ -97,7 +102,7 @@ export interface Message {
   created_at: string;
 }
 
-export interface MessageSource {
+export interface MessageSourceRow {
   id: string;
   message_id: string;
   chunk_id: string;
@@ -118,5 +123,12 @@ export interface MatchDocumentChunkRow {
   similarity: number;
 }
 
-/** Placeholder mínimo para tipar el cliente de Supabase (`createClient<Database>`). */
-export type Database = Record<string, unknown>;
+/**
+ * Nota: no exportamos un tipo `Database` para pasar como genérico a
+ * `createClient<Database>` — sin introspección real del esquema, un
+ * `Database` escrito a mano choca con los tipos internos de supabase-js.
+ * En su lugar, los call sites tipan explícitamente los resultados con las
+ * interfaces de este archivo (`as DocumentRow`, etc). Cuando el proyecto
+ * esté enlazado a un Supabase real, generar tipos con
+ * `supabase gen types typescript` y usarlos en su lugar.
+ */
