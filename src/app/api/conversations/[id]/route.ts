@@ -23,10 +23,15 @@ export async function GET(
     .order('created_at', { ascending: true });
   if (msgError) return NextResponse.json({ error: msgError.message }, { status: 500 });
 
+  // Filtrado por conversation_id vía join, NUNCA por una lista de
+  // message_id: una conversación larga podría acumular suficientes
+  // mensajes como para que `.in('message_id', [...])` reprodujera el
+  // mismo bug de "URL de query demasiado larga -> 400 Bad Request" que
+  // se encontró (y corrigió) para document_embeddings.
   const { data: sources, error: sourcesError } = await supabase
     .from('message_sources')
-    .select('*, documents(title)')
-    .in('message_id', (messages ?? []).map((m) => m.id));
+    .select('*, documents(title), messages!inner(conversation_id)')
+    .eq('messages.conversation_id', id);
   if (sourcesError) return NextResponse.json({ error: sourcesError.message }, { status: 500 });
 
   const sourcesByMessage = new Map<string, unknown[]>();

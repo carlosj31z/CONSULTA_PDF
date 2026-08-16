@@ -76,6 +76,7 @@ export interface DocumentChunkRow {
 
 export interface DocumentEmbeddingRow {
   chunk_id: string;
+  document_id: string;
   embedding: number[];
   model_version: string;
   created_at: string;

@@ -319,10 +319,15 @@ async function runEmbedding(job: ProcessingJobRow): Promise<boolean> {
     .order('position', { ascending: true });
   if (error) throw new Error(error.message);
 
+  // Filtrado por document_id, NUNCA por una lista de chunk_id: con
+  // documentos grandes (p.ej. 945 páginas -> 1000 chunks) un
+  // `.in('chunk_id', [...1000 ids...])` supera el límite de longitud de
+  // query de PostgREST y responde 400 Bad Request -- bug real
+  // encontrado en producción, ver migración 20260821000000.
   const { data: embedded, error: embeddedError } = await supabase
     .from('document_embeddings')
     .select('chunk_id')
-    .in('chunk_id', (chunks ?? []).map((c) => c.id));
+    .eq('document_id', job.document_id);
   if (embeddedError) throw new Error(embeddedError.message);
 
   const embeddedIds = new Set((embedded ?? []).map((e) => e.chunk_id));
@@ -341,6 +346,7 @@ async function runEmbedding(job: ProcessingJobRow): Promise<boolean> {
 
   const rows = batch.map((c, i) => ({
     chunk_id: c.id,
+    document_id: job.document_id,
     embedding: vectors[i],
     model_version: 'gemini-embedding-001',
   }));

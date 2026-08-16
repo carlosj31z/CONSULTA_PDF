@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Upload } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Upload, Search } from 'lucide-react';
 import type { DocumentRow } from '@/types/database';
 import { getSupabaseBrowser } from '@/lib/supabase/browser';
 import { sha256Hex } from '@/lib/utils/format';
@@ -27,11 +28,24 @@ export function LibraryView({
   favoritesOnly?: boolean;
   showUpload?: boolean;
 }) {
+  const router = useRouter();
   const [documents, setDocuments] = useState(initialDocuments);
   const [upload, setUpload] = useState<UploadState>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const tickingRef = useRef(false);
+
+  function handleLibrarySearch(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+    // Sin documentId en la URL -> ChatView interpreta que la consulta es
+    // contra toda la biblioteca. Para preguntar sobre un documento en
+    // concreto, el usuario usa el botón "Preguntar sobre este documento"
+    // de esa tarjeta, que sí manda el documentId.
+    router.push(`/chat?q=${encodeURIComponent(trimmed)}`);
+  }
 
   const refresh = useCallback(async () => {
     const res = await fetch('/api/documents');
@@ -230,6 +244,29 @@ export function LibraryView({
           </>
         )}
       </div>
+
+      <form onSubmit={handleLibrarySearch} className="flex gap-2">
+        <div className="relative flex-1">
+          <Search
+            size={18}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400"
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Pregunta algo sobre tu biblioteca…"
+            className="w-full rounded-full border border-stone-300 bg-white py-3.5 pl-11 pr-4 text-base text-stone-900 outline-none focus:border-orange-500 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-50"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={!searchQuery.trim()}
+          className="rounded-full bg-orange-600 px-6 py-3.5 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+        >
+          Preguntar
+        </button>
+      </form>
 
       {upload && (
         <div className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300">

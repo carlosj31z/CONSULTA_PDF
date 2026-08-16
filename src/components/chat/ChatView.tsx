@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User, X, Zap } from 'lucide-react';
 import { PdfViewerModal } from '@/components/viewer/PdfViewerModal';
 
@@ -60,8 +60,10 @@ function ReasoningBlock({ reasoning }: { reasoning: string }) {
 
 export function ChatView() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const scopeDocumentId = searchParams.get('documentId');
   const scopeDocumentTitle = searchParams.get('title');
+  const incomingQuestion = searchParams.get('q');
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>(undefined);
@@ -70,6 +72,7 @@ export function ChatView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const autoSentRef = useRef(false);
 
   const loadConversations = useCallback(async () => {
     const res = await fetch('/api/conversations');
@@ -136,9 +139,7 @@ export function ChatView() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const question = input.trim();
+  async function sendQuestion(question: string) {
     if (!question || loading) return;
 
     setInput('');
@@ -181,6 +182,25 @@ export function ChatView() {
       setLoading(false);
     }
   }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    sendQuestion(input.trim());
+  }
+
+  // Pregunta que llega desde la barra de búsqueda de la Biblioteca
+  // (?q=...): se envía sola en cuanto se monta el chat, una sola vez, y
+  // se limpia de la URL para que un refresh no la reenvíe.
+  useEffect(() => {
+    if (incomingQuestion && !autoSentRef.current) {
+      autoSentRef.current = true;
+      sendQuestion(incomingQuestion.trim());
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('q');
+      router.replace(params.size > 0 ? `/chat?${params.toString()}` : '/chat');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo debe correr al montar
+  }, []);
 
   return (
     <div className="flex flex-1">

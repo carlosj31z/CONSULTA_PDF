@@ -5,16 +5,19 @@
 export const aiConfig = {
   /**
    * Lista de API keys de Google AI, en orden de preferencia. Soporta
-   * varias (GOOGLE_AI_API_KEY, GOOGLE_AI_API_KEY_2, ...) para poder rotar
-   * automáticamente a la siguiente cuando una se queda sin cuota -- ver
-   * withGemini() en gemini.ts.
+   * GOOGLE_AI_API_KEY + GOOGLE_AI_API_KEY_2, _3, _4... (numeradas en
+   * secuencia, sin límite) para poder rotar automáticamente a la
+   * siguiente cuando una se queda sin cuota -- ver withGemini() en
+   * gemini.ts.
    */
   apiKeys: (): string[] => {
-    const keys = [
-      process.env.GOOGLE_AI_API_KEY,
-      process.env.GOOGLE_AI_API_KEY_2,
-      process.env.GOOGLE_AI_API_KEY_3,
-    ].filter((k): k is string => Boolean(k));
+    const keys: string[] = [];
+    if (process.env.GOOGLE_AI_API_KEY) keys.push(process.env.GOOGLE_AI_API_KEY);
+    for (let i = 2; ; i++) {
+      const key = process.env[`GOOGLE_AI_API_KEY_${i}`];
+      if (!key) break;
+      keys.push(key);
+    }
     if (keys.length === 0) {
       throw new Error('Falta la variable de entorno GOOGLE_AI_API_KEY');
     }
