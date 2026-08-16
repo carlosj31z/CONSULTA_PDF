@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { DocumentRow } from '@/types/database';
 import { formatBytes, formatDate } from '@/lib/utils/format';
 import { StatusBadge } from './StatusBadge';
@@ -63,6 +64,15 @@ export function DocumentCard({
         <span>{formatBytes(document.file_size_bytes)}</span>
         <span>{formatDate(document.created_at)}</span>
       </div>
+
+      {document.status === 'ready' && (
+        <Link
+          href={`/chat?documentId=${document.id}&title=${encodeURIComponent(document.title)}`}
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-center text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          💬 Preguntar sobre este documento
+        </Link>
+      )}
     </div>
   );
 }
