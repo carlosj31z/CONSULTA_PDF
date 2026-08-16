@@ -49,22 +49,27 @@ export function DocumentCard({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-3 min-w-0">
-          {showCover ? (
-            // eslint-disable-next-line @next/next/no-img-element -- imagen dinámica de Storage, no un asset local
-            <img
-              src={coverUrl}
-              alt=""
-              onError={() => setCoverFailed(true)}
-              className="h-14 w-11 shrink-0 rounded-md border border-stone-200 object-cover dark:border-stone-800"
-            />
-          ) : (
-            <div className="flex h-14 w-11 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
-              <FileText size={18} strokeWidth={2} />
-            </div>
-          )}
+    <div className="flex overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
+      {/* Carátula: ocupa todo el alto de la tarjeta, pegada al lado izquierdo */}
+      <div className="w-28 shrink-0 self-stretch sm:w-32">
+        {showCover ? (
+          // eslint-disable-next-line @next/next/no-img-element -- imagen dinámica de Storage, no un asset local
+          <img
+            src={coverUrl}
+            alt=""
+            onError={() => setCoverFailed(true)}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
+            <FileText size={24} strokeWidth={2} />
+          </div>
+        )}
+      </div>
+
+      {/* Resto de la información, redistribuida a la derecha de la carátula */}
+      <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
+        <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             {editing ? (
               <form
@@ -116,66 +121,66 @@ export function DocumentCard({
               </p>
             )}
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {onToggleFavorite && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {onToggleFavorite && (
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(document.id, !document.is_favorite)}
+                className={`rounded-md p-1.5 hover:bg-amber-50 dark:hover:bg-amber-500/10 ${
+                  document.is_favorite ? 'text-amber-500' : 'text-stone-400 hover:text-amber-500'
+                }`}
+                aria-label={document.is_favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                title={document.is_favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+              >
+                <Star size={16} fill={document.is_favorite ? 'currentColor' : 'none'} />
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => onToggleFavorite(document.id, !document.is_favorite)}
-              className={`rounded-md p-1.5 hover:bg-amber-50 dark:hover:bg-amber-500/10 ${
-                document.is_favorite ? 'text-amber-500' : 'text-stone-400 hover:text-amber-500'
-              }`}
-              aria-label={document.is_favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-              title={document.is_favorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+              onClick={() => onDelete(document.id)}
+              className="rounded-md p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+              aria-label={`Eliminar ${document.title}`}
+              title="Eliminar"
             >
-              <Star size={16} fill={document.is_favorite ? 'currentColor' : 'none'} />
+              <X size={16} />
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => onDelete(document.id)}
-            className="rounded-md p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
-            aria-label={`Eliminar ${document.title}`}
-            title="Eliminar"
-          >
-            <X size={16} />
-          </button>
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={document.status} />
-        {document.status === 'error' && document.processing_error && (
-          <span className="text-xs text-red-600 dark:text-red-400">
-            {document.processing_error}
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={document.status} />
+          {document.status === 'error' && document.processing_error && (
+            <span className="text-xs text-red-600 dark:text-red-400">
+              {document.processing_error}
+            </span>
+          )}
+        </div>
+
+        {document.status === 'processing' && (
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
+            <div
+              className="h-full rounded-full bg-orange-500 transition-all"
+              style={{ width: `${document.processing_progress}%` }}
+            />
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+          <span>{document.page_count ? `${document.page_count} páginas` : '— páginas'}</span>
+          <span>{formatBytes(document.file_size_bytes)}</span>
+          <span>{formatDate(document.created_at)}</span>
+        </div>
+
+        {document.status === 'ready' && (
+          <Link
+            href={`/chat?documentId=${document.id}&title=${encodeURIComponent(document.title)}`}
+            className="mt-auto flex items-center justify-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+          >
+            <MessageSquare size={15} />
+            Preguntar sobre este documento
+          </Link>
         )}
       </div>
-
-      {document.status === 'processing' && (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
-          <div
-            className="h-full rounded-full bg-orange-500 transition-all"
-            style={{ width: `${document.processing_progress}%` }}
-          />
-        </div>
-      )}
-
-      <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
-        <span>{document.page_count ? `${document.page_count} páginas` : '— páginas'}</span>
-        <span>{formatBytes(document.file_size_bytes)}</span>
-        <span>{formatDate(document.created_at)}</span>
-      </div>
-
-      {document.status === 'ready' && (
-        <Link
-          href={`/chat?documentId=${document.id}&title=${encodeURIComponent(document.title)}`}
-          className="flex items-center justify-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
-        >
-          <MessageSquare size={15} />
-          Preguntar sobre este documento
-        </Link>
-      )}
     </div>
   );
 }
