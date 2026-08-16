@@ -139,7 +139,7 @@ async function runStarting(job: ProcessingJobRow): Promise<boolean> {
   const supabase = getSupabaseAdmin();
   const { data: document, error } = await supabase
     .from('documents')
-    .select('storage_path')
+    .select('storage_path, title')
     .eq('id', job.document_id)
     .single();
   if (error || !document) throw new Error(error?.message ?? 'Documento no encontrado');
@@ -151,7 +151,7 @@ async function runStarting(job: ProcessingJobRow): Promise<boolean> {
   // La carátula es un extra visual, no crítico: si falla no debe tumbar
   // el pipeline -- el documento simplemente se muestra con el ícono
   // genérico en vez de una miniatura de la portada.
-  const cover = await renderCoverImage(bytes);
+  const cover = await renderCoverImage(bytes, document.title);
   if (cover) {
     await supabase.storage
       .from(COVERS_BUCKET)
