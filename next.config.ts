@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/**/*": ["./node_modules/pdfjs-dist/**"],
   },
+  // @napi-rs/canvas trae un binario nativo (.node) por plataforma -- el
+  // bundler de Turbopack no puede empaquetarlo como un módulo ES normal
+  // ("non-ecmascript placeable asset"). Se deja fuera del bundle y se
+  // usa tal cual desde node_modules en tiempo de ejecución.
+  serverExternalPackages: ["@napi-rs/canvas"],
 };
 
 export default nextConfig;

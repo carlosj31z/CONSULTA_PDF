@@ -1,11 +1,12 @@
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
-import { DOCUMENTS_BUCKET } from '@/lib/documents/constants';
+import { DOCUMENTS_BUCKET, COVERS_BUCKET, coverPathFor } from '@/lib/documents/constants';
 import { openPdf, extractPageText, hasSufficientNativeText } from './pdf-reader';
 import { extractPagesAsPdf } from './pdf-split';
 import { transcribePagesWithVision } from './vision';
 import { chunkPages, type PageForChunking } from './chunking';
 import { stripBoilerplate } from './boilerplate';
 import { embedTexts } from './embeddings';
+import { renderCoverImage } from './cover';
 import type { DocumentPageRow, ProcessingJobRow } from '@/types/database';
 
 const PAGE_BATCH_SIZE = 15;
@@ -136,6 +137,16 @@ async function runStarting(job: ProcessingJobRow): Promise<boolean> {
   const bytes = await downloadPdfBytes(document.storage_path);
   const pdf = await openPdf(bytes);
   const pageCount = pdf.numPages;
+
+  // La carátula es un extra visual, no crítico: si falla no debe tumbar
+  // el pipeline -- el documento simplemente se muestra con el ícono
+  // genérico en vez de una miniatura de la portada.
+  const cover = await renderCoverImage(bytes);
+  if (cover) {
+    await supabase.storage
+      .from(COVERS_BUCKET)
+      .upload(coverPathFor(job.document_id), cover, { contentType: 'image/png', upsert: true });
+  }
 
   await supabase
     .from('documents')

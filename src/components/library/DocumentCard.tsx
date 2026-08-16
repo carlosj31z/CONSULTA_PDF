@@ -7,6 +7,17 @@ import type { DocumentRow } from '@/types/database';
 import { formatBytes, formatDate } from '@/lib/utils/format';
 import { StatusBadge } from './StatusBadge';
 
+/**
+ * Bucket "covers" público -- se accede por URL directa, sin firmar. Si la
+ * carátula no existe (documento aún no procesado, o falló al generarla),
+ * la imagen simplemente da 404 y el <img onError> cae al ícono genérico.
+ */
+function coverUrlFor(documentId: string): string | null {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return null;
+  return `${base}/storage/v1/object/public/covers/${documentId}/cover.png`;
+}
+
 export function DocumentCard({
   document,
   onDelete,
@@ -20,6 +31,9 @@ export function DocumentCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(document.title);
+  const [coverFailed, setCoverFailed] = useState(false);
+  const coverUrl = coverUrlFor(document.id);
+  const showCover = coverUrl && !coverFailed;
 
   function startEditing() {
     setDraftTitle(document.title);
@@ -38,9 +52,19 @@ export function DocumentCard({
     <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
-            <FileText size={18} strokeWidth={2} />
-          </div>
+          {showCover ? (
+            // eslint-disable-next-line @next/next/no-img-element -- imagen dinámica de Storage, no un asset local
+            <img
+              src={coverUrl}
+              alt=""
+              onError={() => setCoverFailed(true)}
+              className="h-14 w-11 shrink-0 rounded-md border border-stone-200 object-cover dark:border-stone-800"
+            />
+          ) : (
+            <div className="flex h-14 w-11 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
+              <FileText size={18} strokeWidth={2} />
+            </div>
+          )}
           <div className="min-w-0">
             {editing ? (
               <form
