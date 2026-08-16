@@ -1,4 +1,4 @@
-import { getGeminiClient, aiConfig } from '@/lib/ai/gemini';
+import { withGemini, aiConfig } from '@/lib/ai/gemini';
 
 /**
  * L2-normaliza un vector truncado. gemini-embedding-001 usa Matryoshka
@@ -24,19 +24,20 @@ export async function embedTexts(
   texts: string[],
   taskType: 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY',
 ): Promise<number[][]> {
-  const ai = getGeminiClient();
   const results: number[][] = [];
 
   for (let i = 0; i < texts.length; i += EMBED_BATCH_SIZE) {
     const batch = texts.slice(i, i + EMBED_BATCH_SIZE);
-    const response = await ai.models.embedContent({
-      model: aiConfig.models.embedding,
-      contents: batch,
-      config: {
-        taskType,
-        outputDimensionality: aiConfig.embeddingDimensions,
-      },
-    });
+    const response = await withGemini((ai) =>
+      ai.models.embedContent({
+        model: aiConfig.models.embedding,
+        contents: batch,
+        config: {
+          taskType,
+          outputDimensionality: aiConfig.embeddingDimensions,
+        },
+      }),
+    );
 
     for (const embedding of response.embeddings ?? []) {
       const values = embedding.values ?? [];

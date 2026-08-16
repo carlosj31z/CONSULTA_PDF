@@ -1,5 +1,5 @@
 import { Type } from '@google/genai';
-import { getGeminiClient, aiConfig } from '@/lib/ai/gemini';
+import { withGemini, aiConfig } from '@/lib/ai/gemini';
 import type { RetrievedChunk } from './retrieval';
 
 export interface AnswerSource {
@@ -94,15 +94,16 @@ ${contextBlock}
 
 Pregunta del usuario: ${question}`;
 
-  const ai = getGeminiClient();
-  const result = await ai.models.generateContent({
-    model: aiConfig.models.pro,
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: RESPONSE_SCHEMA,
-    },
-  });
+  const result = await withGemini((ai) =>
+    ai.models.generateContent({
+      model: aiConfig.models.pro,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: RESPONSE_SCHEMA,
+      },
+    }),
+  );
 
   const raw = result.text;
   if (!raw) throw new Error('Gemini no devolvió una respuesta');

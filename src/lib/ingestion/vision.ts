@@ -1,5 +1,5 @@
 import { Type } from '@google/genai';
-import { getGeminiClient, aiConfig } from '@/lib/ai/gemini';
+import { withGemini, aiConfig } from '@/lib/ai/gemini';
 import type { ChunkContentType } from '@/types/database';
 
 export interface VisionPageResult {
@@ -52,25 +52,26 @@ export async function transcribePagesWithVision(
   subPdfBytes: Uint8Array,
   pageNumberMap: number[],
 ): Promise<VisionPageResult[]> {
-  const ai = getGeminiClient();
   const base64 = Buffer.from(subPdfBytes).toString('base64');
 
-  const result = await ai.models.generateContent({
-    model: aiConfig.models.flash,
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: PROMPT },
-          { inlineData: { mimeType: 'application/pdf', data: base64 } },
-        ],
+  const result = await withGemini((ai) =>
+    ai.models.generateContent({
+      model: aiConfig.models.flash,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: PROMPT },
+            { inlineData: { mimeType: 'application/pdf', data: base64 } },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: RESPONSE_SCHEMA,
       },
-    ],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: RESPONSE_SCHEMA,
-    },
-  });
+    }),
+  );
 
   const raw = result.text;
   if (!raw) {
