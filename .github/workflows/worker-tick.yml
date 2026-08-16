@@ -20,11 +20,27 @@ jobs:
             echo "Falta la variable de repositorio APP_URL (Settings > Secrets and variables > Actions > Variables)."
             exit 1
           fi
+          FAILURES=0
           for i in $(seq 1 30); do
-            RESPONSE=$(curl -s -X POST "${{ vars.APP_URL }}/api/worker/tick")
-            echo "tick $i: $RESPONSE"
+            HTTP_CODE=$(curl -sL -X POST "${{ vars.APP_URL }}/api/worker/tick" -o /tmp/response.json -w "%{http_code}")
+            RESPONSE=$(cat /tmp/response.json)
+            echo "tick $i: http=$HTTP_CODE body=$RESPONSE"
             case "$RESPONSE" in
-              *'"processed":false'*) echo "No hay trabajo pendiente."; break ;;
+              *'"processed":false'*)
+                echo "No hay trabajo pendiente."
+                exit 0
+                ;;
+              *'"processed":true'*)
+                FAILURES=0
+                ;;
+              *)
+                echo "::warning::Respuesta inesperada (no es el JSON esperado del endpoint -- podría ser una pantalla de protección/desafío de Vercel bloqueando peticiones automatizadas)."
+                FAILURES=$((FAILURES + 1))
+                if [ "$FAILURES" -ge 3 ]; then
+                  echo "::error::3 respuestas inesperadas seguidas, abortando."
+                  exit 1
+                fi
+                ;;
             esac
             sleep 3
           done
