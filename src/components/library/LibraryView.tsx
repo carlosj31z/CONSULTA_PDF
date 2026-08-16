@@ -66,6 +66,11 @@ export function LibraryView({ initialDocuments }: { initialDocuments: DocumentRo
       return;
     }
 
+    // Si falla algo DESPUÉS de crear el registro del documento, hay que
+    // borrarlo -- si no, queda un documento "pending" huérfano sin
+    // archivo real y sin job, atascado para siempre.
+    let createdDocumentId: string | undefined;
+
     try {
       setUpload({ fileName: file.name, stage: 'Calculando huella del archivo…' });
       const fileHash = await sha256Hex(file);
@@ -91,6 +96,8 @@ export function LibraryView({ initialDocuments }: { initialDocuments: DocumentRo
         return;
       }
 
+      createdDocumentId = initBody.documentId;
+
       setUpload({ fileName: file.name, stage: 'Subiendo a Storage…' });
       const supabase = getSupabaseBrowser();
       const { error: uploadError } = await supabase.storage
@@ -99,13 +106,21 @@ export function LibraryView({ initialDocuments }: { initialDocuments: DocumentRo
       if (uploadError) throw uploadError;
 
       setUpload({ fileName: file.name, stage: 'Confirmando…' });
-      await fetch(`/api/documents/${initBody.documentId}/complete`, { method: 'POST' });
+      const completeRes = await fetch(`/api/documents/${initBody.documentId}/complete`, { method: 'POST' });
+      if (!completeRes.ok) {
+        const body = await completeRes.json().catch(() => ({}));
+        throw new Error(body.error ?? 'No se pudo confirmar la subida ni encolar el procesamiento');
+      }
 
       setUpload(null);
       await refresh();
     } catch (err) {
       setUpload(null);
       setError(err instanceof Error ? err.message : 'Error subiendo el archivo');
+      if (createdDocumentId) {
+        await fetch(`/api/documents/${createdDocumentId}`, { method: 'DELETE' }).catch(() => {});
+        await refresh();
+      }
     }
   }
 
