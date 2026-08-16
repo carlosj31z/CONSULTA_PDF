@@ -15,6 +15,8 @@ export interface AnswerResult {
   foundInDocuments: boolean;
   confidence: number;
   sources: AnswerSource[];
+  /** Resumen del razonamiento real del modelo (Gemini thinking), si lo hubo. */
+  reasoning: string | null;
 }
 
 const RESPONSE_SCHEMA = {
@@ -101,9 +103,18 @@ Pregunta del usuario: ${question}`;
       config: {
         responseMimeType: 'application/json',
         responseSchema: RESPONSE_SCHEMA,
+        // Razonamiento real (no simulado): Gemini expone un resumen de su
+        // propio proceso de pensamiento antes de la respuesta final.
+        // result.text ya excluye las partes de "thought" automáticamente,
+        // así que el parseo del JSON de abajo no se ve afectado.
+        thinkingConfig: { includeThoughts: true },
       },
     }),
   );
+
+  const thoughtParts =
+    result.candidates?.[0]?.content?.parts?.filter((p) => p.thought && p.text) ?? [];
+  const reasoning = thoughtParts.length > 0 ? thoughtParts.map((p) => p.text).join('\n\n') : null;
 
   const raw = result.text;
   if (!raw) throw new Error('Gemini no devolvió una respuesta');
@@ -137,5 +148,6 @@ Pregunta del usuario: ${question}`;
     foundInDocuments: parsed.found_in_documents,
     confidence: parsed.confidence,
     sources,
+    reasoning,
   };
 }

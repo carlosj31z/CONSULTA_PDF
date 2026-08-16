@@ -30,6 +30,7 @@ export interface DocumentRow {
   status: DocumentStatus;
   processing_progress: number;
   processing_error: string | null;
+  is_favorite: boolean;
   created_at: string;
   updated_at: string;
 }

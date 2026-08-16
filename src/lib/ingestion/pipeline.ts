@@ -4,6 +4,7 @@ import { openPdf, extractPageText, hasSufficientNativeText } from './pdf-reader'
 import { extractPagesAsPdf } from './pdf-split';
 import { transcribePagesWithVision } from './vision';
 import { chunkPages, type PageForChunking } from './chunking';
+import { stripBoilerplate } from './boilerplate';
 import { embedTexts } from './embeddings';
 import type { DocumentPageRow, ProcessingJobRow } from '@/types/database';
 
@@ -249,7 +250,11 @@ async function runChunking(job: ProcessingJobRow): Promise<boolean> {
     contentTypeHint: p.content_type_hint ?? undefined,
   }));
 
-  const chunks = chunkPages(pagesForChunking);
+  // Elimina marcas de agua / licencias / encabezados-pies de página
+  // repetidos antes de fragmentar -- si no, cada chunk arrastra ese ruido.
+  const cleanedPages = stripBoilerplate(pagesForChunking);
+
+  const chunks = chunkPages(cleanedPages);
 
   if (chunks.length > 0) {
     const rows = chunks.map((c) => ({

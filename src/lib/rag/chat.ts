@@ -19,6 +19,7 @@ export interface ChatResult {
   foundInDocuments: boolean;
   confidence: number;
   sources: ChatSource[];
+  reasoning: string | null;
 }
 
 const NOT_FOUND_ANSWER =
@@ -84,6 +85,7 @@ export async function askQuestion(params: {
       foundInDocuments: false,
       confidence: 0,
       sources: [],
+      reasoning: null,
     };
   }
 
@@ -145,5 +147,6 @@ export async function askQuestion(params: {
       pageEnd: s.pageEnd,
       quote: s.quote,
     })),
+    reasoning: result.reasoning,
   };
 }

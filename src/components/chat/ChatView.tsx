@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User } from 'lucide-react';
 import { PdfViewerModal } from '@/components/viewer/PdfViewerModal';
 
 interface ChatSource {
@@ -18,6 +19,7 @@ interface ChatMessage {
   confidence?: number;
   foundInDocuments?: boolean;
   sources?: ChatSource[];
+  reasoning?: string | null;
 }
 
 interface ConversationSummary {
@@ -31,6 +33,28 @@ interface ViewerState {
   documentId: string;
   documentTitle: string;
   page: number;
+}
+
+function ReasoningBlock({ reasoning }: { reasoning: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-medium text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"
+      >
+        <Brain size={13} />
+        Razonamiento
+        {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+      </button>
+      {open && (
+        <div className="mt-1 whitespace-pre-wrap rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs italic text-stone-500 dark:border-stone-800 dark:bg-stone-900/60 dark:text-stone-400">
+          {reasoning}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ChatView() {
@@ -133,6 +157,7 @@ export function ChatView() {
           confidence: body.confidence,
           foundInDocuments: body.foundInDocuments,
           sources: body.sources,
+          reasoning: body.reasoning,
         },
       ]);
       if (isNewConversation) loadConversations();
@@ -145,13 +170,14 @@ export function ChatView() {
 
   return (
     <div className="flex flex-1">
-      <aside className="flex w-56 shrink-0 flex-col gap-1 border-r border-zinc-200 p-3 dark:border-zinc-800">
+      <aside className="flex w-60 shrink-0 flex-col gap-1 border-r border-stone-200 p-3 dark:border-stone-800">
         <button
           type="button"
           onClick={startNewConversation}
-          className="mb-2 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          className="mb-2 flex items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
         >
-          + Nueva conversación
+          <Plus size={15} />
+          Nueva conversación
         </button>
         <div className="flex flex-col gap-0.5 overflow-y-auto">
           {conversations.map((c) => (
@@ -161,8 +187,8 @@ export function ChatView() {
               onClick={() => loadConversation(c.id)}
               className={`truncate rounded-lg px-3 py-2 text-left text-sm ${
                 c.id === activeConversationId
-                  ? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
-                  : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/60'
+                  ? 'bg-orange-100 text-orange-900 dark:bg-orange-500/15 dark:text-orange-300'
+                  : 'text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800/60'
               }`}
             >
               {c.title || 'Conversación'}
@@ -173,7 +199,7 @@ export function ChatView() {
 
       <div className="flex flex-1 flex-col">
         {scopeDocumentId && (
-          <div className="border-b border-zinc-200 bg-blue-50 px-4 py-2 text-xs text-blue-800 dark:border-zinc-800 dark:bg-blue-500/10 dark:text-blue-300">
+          <div className="border-b border-stone-200 bg-orange-50 px-4 py-2 text-xs text-orange-800 dark:border-stone-800 dark:bg-orange-500/10 dark:text-orange-300">
             Preguntando solo sobre: <strong>{scopeDocumentTitle ?? 'este documento'}</strong>
           </div>
         )}
@@ -181,50 +207,71 @@ export function ChatView() {
         <div className="flex-1 overflow-y-auto p-6">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-              <p className="text-zinc-500 dark:text-zinc-400">
+              <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-600 text-white">
+                <BookOpen size={22} />
+              </div>
+              <p className="text-stone-600 dark:text-stone-300">
                 {scopeDocumentId ? 'Pregunta sobre este documento.' : 'Pregunta lo que quieras sobre tu biblioteca.'}
               </p>
-              <p className="text-sm text-zinc-400 dark:text-zinc-500">
+              <p className="text-sm text-stone-400 dark:text-stone-500">
                 Las respuestas se basan únicamente en tus documentos, con fuentes citadas.
               </p>
             </div>
           ) : (
-            <div className="mx-auto flex max-w-2xl flex-col gap-4">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
-                      m.role === 'user'
-                        ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                        : 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{m.content}</p>
-                    {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
-                      <div className="mt-3 flex flex-col gap-1.5 border-t border-zinc-300/50 pt-2 dark:border-zinc-700/50">
-                        {m.sources.map((s, si) => (
-                          <button
-                            key={si}
-                            type="button"
-                            onClick={() =>
-                              setViewer({ documentId: s.documentId, documentTitle: s.documentTitle, page: s.pageStart })
-                            }
-                            className="cursor-pointer rounded-md p-1 text-left text-xs text-zinc-500 hover:bg-zinc-200/60 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-700/60 dark:hover:text-zinc-200"
-                          >
-                            <span aria-hidden>📖</span> {s.documentTitle} — página {s.pageStart}
-                            {s.pageEnd !== s.pageStart ? `-${s.pageEnd}` : ''}
-                            <p className="mt-0.5 italic text-zinc-400 dark:text-zinc-500">“{s.quote}”</p>
-                          </button>
-                        ))}
+            <div className="mx-auto flex max-w-2xl flex-col gap-6">
+              {messages.map((m, i) =>
+                m.role === 'user' ? (
+                  <div key={i} className="flex justify-end">
+                    <div className="flex max-w-[80%] items-start gap-2">
+                      <div className="rounded-2xl bg-stone-900 px-4 py-2.5 text-sm text-white dark:bg-stone-100 dark:text-stone-900">
+                        <p className="whitespace-pre-wrap">{m.content}</p>
                       </div>
-                    )}
+                      <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-300">
+                        <User size={13} />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ) : (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white">
+                      <BookOpen size={13} />
+                    </div>
+                    <div className="min-w-0 flex-1 text-sm text-stone-900 dark:text-stone-50">
+                      {m.reasoning && <ReasoningBlock reasoning={m.reasoning} />}
+                      <p className="whitespace-pre-wrap">{m.content}</p>
+                      {m.sources && m.sources.length > 0 && (
+                        <div className="mt-3 flex flex-col gap-1.5 border-t border-stone-200 pt-2 dark:border-stone-800">
+                          {m.sources.map((s, si) => (
+                            <button
+                              key={si}
+                              type="button"
+                              onClick={() =>
+                                setViewer({ documentId: s.documentId, documentTitle: s.documentTitle, page: s.pageStart })
+                              }
+                              className="cursor-pointer rounded-md p-1 text-left text-xs text-stone-500 hover:bg-stone-100 hover:text-stone-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
+                            >
+                              <span className="inline-flex items-center gap-1 font-medium">
+                                <BookOpen size={11} /> {s.documentTitle} — página {s.pageStart}
+                                {s.pageEnd !== s.pageStart ? `-${s.pageEnd}` : ''}
+                              </span>
+                              <p className="mt-0.5 italic text-stone-400 dark:text-stone-500">“{s.quote}”</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ),
+              )}
               {loading && (
-                <div className="flex justify-start">
-                  <div className="rounded-2xl bg-zinc-100 px-4 py-2.5 text-sm text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                    Pensando…
+                <div className="flex items-center gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white">
+                    <BookOpen size={13} />
+                  </div>
+                  <div className="flex items-center gap-1 text-sm text-stone-400 dark:text-stone-500">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.3s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.15s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400" />
                   </div>
                 </div>
               )}
@@ -238,7 +285,7 @@ export function ChatView() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="border-t border-zinc-200 p-4 dark:border-zinc-800">
+        <form onSubmit={handleSubmit} className="border-t border-stone-200 p-4 dark:border-stone-800">
           <div className="mx-auto flex max-w-2xl gap-2">
             <input
               type="text"
@@ -246,14 +293,15 @@ export function ChatView() {
               onChange={(e) => setInput(e.target.value)}
               placeholder={scopeDocumentId ? 'Pregunta sobre este documento…' : 'Pregunta sobre tu biblioteca…'}
               disabled={loading}
-              className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              className="flex-1 rounded-full border border-stone-300 bg-white px-4 py-2.5 text-sm text-stone-900 outline-none focus:border-orange-500 disabled:opacity-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-50"
             />
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              className="flex items-center justify-center rounded-full bg-orange-600 p-2.5 text-white hover:bg-orange-700 disabled:opacity-50"
+              aria-label="Enviar"
             >
-              Preguntar
+              <Send size={16} />
             </button>
           </div>
         </form>

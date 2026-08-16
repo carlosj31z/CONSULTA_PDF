@@ -1,3 +1,4 @@
+import { Clock, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { DocumentStatus } from '@/types/database';
 
 const STYLES: Record<DocumentStatus, string> = {
@@ -14,11 +15,20 @@ const LABELS: Record<DocumentStatus, string> = {
   error: 'Error',
 };
 
+const ICONS: Record<DocumentStatus, typeof Clock> = {
+  pending: Clock,
+  processing: Loader2,
+  ready: CheckCircle2,
+  error: AlertCircle,
+};
+
 export function StatusBadge({ status }: { status: DocumentStatus }) {
+  const Icon = ICONS[status];
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STYLES[status]}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${STYLES[status]}`}
     >
+      <Icon size={12} className={status === 'processing' ? 'animate-spin' : ''} />
       {LABELS[status]}
     </span>
   );

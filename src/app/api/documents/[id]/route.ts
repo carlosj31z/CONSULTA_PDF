@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import { DOCUMENTS_BUCKET } from '@/lib/documents/constants';
 
@@ -16,6 +17,34 @@ export async function GET(
   if (!data) {
     return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
   }
+  return NextResponse.json({ document: data });
+}
+
+const patchSchema = z.object({
+  is_favorite: z.boolean().optional(),
+});
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const body = await request.json().catch(() => null);
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('documents')
+    .update(parsed.data)
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 });
   return NextResponse.json({ document: data });
 }
 
