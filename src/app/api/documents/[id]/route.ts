@@ -22,6 +22,7 @@ export async function GET(
 
 const patchSchema = z.object({
   is_favorite: z.boolean().optional(),
+  title: z.string().trim().min(1).max(500).optional(),
 });
 
 export async function PATCH(

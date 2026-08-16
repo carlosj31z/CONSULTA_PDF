@@ -168,6 +168,20 @@ export function LibraryView({
     }
   }
 
+  async function handleRename(id: string, title: string) {
+    const previous = documents;
+    setDocuments((docs) => docs.map((d) => (d.id === id ? { ...d, title } : d)));
+    const res = await fetch(`/api/documents/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) {
+      setDocuments(previous);
+      setError('No se pudo renombrar el documento');
+    }
+  }
+
   const visibleDocuments = favoritesOnly ? documents.filter((d) => d.is_favorite) : documents;
 
   return (
@@ -230,6 +244,7 @@ export function LibraryView({
               document={doc}
               onDelete={handleDelete}
               onToggleFavorite={handleToggleFavorite}
+              onRename={handleRename}
             />
           ))}
         </div>

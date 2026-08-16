@@ -43,3 +43,15 @@ export async function GET(
 
   return NextResponse.json({ conversation, messages: messagesWithSources });
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const supabase = getSupabaseAdmin();
+  // messages y message_sources caen por ON DELETE CASCADE.
+  const { error } = await supabase.from('conversations').delete().eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}

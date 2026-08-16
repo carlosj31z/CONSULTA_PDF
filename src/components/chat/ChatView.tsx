@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User } from 'lucide-react';
+import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User, X } from 'lucide-react';
 import { PdfViewerModal } from '@/components/viewer/PdfViewerModal';
 
 interface ChatSource {
@@ -123,6 +123,18 @@ export function ChatView() {
     setError(null);
   }
 
+  async function handleDeleteConversation(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const previous = conversations;
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (activeConversationId === id) startNewConversation();
+    const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      setConversations(previous);
+      setError('No se pudo eliminar la conversación');
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const question = input.trim();
@@ -181,18 +193,31 @@ export function ChatView() {
         </button>
         <div className="flex flex-col gap-0.5 overflow-y-auto">
           {conversations.map((c) => (
-            <button
+            <div
               key={c.id}
-              type="button"
-              onClick={() => loadConversation(c.id)}
-              className={`truncate rounded-lg px-3 py-2 text-left text-sm ${
+              className={`group/conv flex items-center gap-1 rounded-lg pr-1 text-sm ${
                 c.id === activeConversationId
                   ? 'bg-orange-100 text-orange-900 dark:bg-orange-500/15 dark:text-orange-300'
                   : 'text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800/60'
               }`}
             >
-              {c.title || 'Conversación'}
-            </button>
+              <button
+                type="button"
+                onClick={() => loadConversation(c.id)}
+                className="min-w-0 flex-1 truncate px-3 py-2 text-left"
+              >
+                {c.title || 'Conversación'}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleDeleteConversation(c.id, e)}
+                className="shrink-0 rounded-md p-1 text-stone-400 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover/conv:opacity-100 dark:hover:bg-red-500/10"
+                aria-label={`Eliminar conversación ${c.title ?? ''}`}
+                title="Eliminar conversación"
+              >
+                <X size={13} />
+              </button>
+            </div>
           ))}
         </div>
       </aside>
