@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User, X, Zap } from 'lucide-react';
+import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User, X, Zap, History } from 'lucide-react';
 import { PdfViewerModal } from '@/components/viewer/PdfViewerModal';
 
 interface ChatSource {
@@ -72,6 +72,7 @@ export function ChatView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<ViewerState | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const autoSentRef = useRef(false);
 
   const loadConversations = useCallback(async () => {
@@ -119,12 +120,14 @@ export function ChatView() {
         })),
       })),
     );
+    setHistoryOpen(false);
   }
 
   function startNewConversation() {
     setActiveConversationId(undefined);
     setMessages([]);
     setError(null);
+    setHistoryOpen(false);
   }
 
   async function handleDeleteConversation(id: string, e: React.MouseEvent) {
@@ -203,16 +206,39 @@ export function ChatView() {
   }, []);
 
   return (
-    <div className="flex flex-1">
-      <aside className="flex w-60 shrink-0 flex-col gap-1 border-r border-stone-200 p-3 dark:border-stone-800">
-        <button
-          type="button"
-          onClick={startNewConversation}
-          className="mb-2 flex items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
-        >
-          <Plus size={15} />
-          Nueva conversación
-        </button>
+    <div className="flex flex-1 overflow-hidden">
+      {/* Fondo oscuro solo en móvil, cierra el panel al tocarlo */}
+      {historyOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setHistoryOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col gap-1 border-r border-stone-200 bg-stone-50 p-3 transition-transform duration-200 ease-out dark:border-stone-800 dark:bg-stone-950 md:relative md:z-auto md:w-60 md:translate-x-0 md:bg-transparent dark:md:bg-transparent ${
+          historyOpen ? 'translate-x-0' : ''
+        }`}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={startNewConversation}
+            className="flex flex-1 items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+          >
+            <Plus size={15} />
+            Nueva conversación
+          </button>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(false)}
+            className="shrink-0 rounded-md p-1.5 text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800 md:hidden"
+            aria-label="Cerrar historial"
+          >
+            <X size={18} />
+          </button>
+        </div>
         <div className="flex flex-col gap-0.5 overflow-y-auto">
           {conversations.map((c) => (
             <div
@@ -244,14 +270,25 @@ export function ChatView() {
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-center gap-2 border-b border-stone-200 px-3 py-2 dark:border-stone-800 md:hidden">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
+          >
+            <History size={16} />
+            Conversaciones
+          </button>
+        </div>
+
         {scopeDocumentId && (
           <div className="border-b border-stone-200 bg-orange-50 px-4 py-2 text-xs text-orange-800 dark:border-stone-800 dark:bg-orange-500/10 dark:text-orange-300">
             Preguntando solo sobre: <strong>{scopeDocumentTitle ?? 'este documento'}</strong>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
               <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-600 text-white">

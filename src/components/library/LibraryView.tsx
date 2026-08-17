@@ -211,9 +211,9 @@ export function LibraryView({
   const visibleDocuments = favoritesOnly ? documents.filter((d) => d.is_favorite) : documents;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="flex flex-1 flex-col gap-5 p-4 sm:gap-6 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl font-semibold text-stone-900 dark:text-stone-50">{title}</h1>
           <p className="text-sm text-stone-500 dark:text-stone-400">
             {visibleDocuments.length} documento{visibleDocuments.length === 1 ? '' : 's'}
@@ -249,22 +249,24 @@ export function LibraryView({
         <div className="relative flex-1">
           <Search
             size={18}
-            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400"
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 sm:left-4"
           />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Pregunta algo sobre tu biblioteca…"
-            className="w-full rounded-full border border-stone-300 bg-white py-3.5 pl-11 pr-4 text-base text-stone-900 outline-none focus:border-orange-500 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-50"
+            className="w-full rounded-full border border-stone-300 bg-white py-3 pl-10 pr-3 text-base text-stone-900 outline-none focus:border-orange-500 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-50 sm:py-3.5 sm:pl-11 sm:pr-4"
           />
         </div>
         <button
           type="submit"
           disabled={!searchQuery.trim()}
-          className="rounded-full bg-orange-600 px-6 py-3.5 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+          className="flex shrink-0 items-center justify-center rounded-full bg-orange-600 p-3 text-white hover:bg-orange-700 disabled:opacity-50 sm:px-6 sm:py-3.5"
+          aria-label="Preguntar"
         >
-          Preguntar
+          <Search size={18} className="sm:hidden" />
+          <span className="hidden text-sm font-medium sm:inline">Preguntar</span>
         </button>
       </form>
 
