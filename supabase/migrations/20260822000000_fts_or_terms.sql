@@ -60,20 +60,26 @@ begin
 
   tsq := to_tsquery('simple', array_to_string(terms, ' | '));
 
+  -- Los tipos deben coincidir EXACTAMENTE con los de RETURNS TABLE:
+  -- plpgsql (a diferencia de una función en SQL plano) no inserta
+  -- conversiones implícitas en RETURN QUERY. ts_rank devuelve `real`
+  -- (float4) y aquí se declara `float` (float8), así que hay que
+  -- convertirlo a mano o falla con "structure of query does not match
+  -- function result type".
   return query
   select
     dc.id as chunk_id,
     dc.document_id,
     dc.content,
-    dc.page_start,
-    dc.page_end,
+    dc.page_start::int,
+    dc.page_end::int,
     dc.chapter,
     dc.section,
-    ts_rank(to_tsvector('simple', dc.content), tsq) as rank
+    ts_rank(to_tsvector('simple', dc.content), tsq)::float as rank
   from document_chunks dc
   where to_tsvector('simple', dc.content) @@ tsq
     and (filter_document_ids is null or dc.document_id = any (filter_document_ids))
-  order by rank desc
+  order by ts_rank(to_tsvector('simple', dc.content), tsq) desc
   limit match_count;
 end;
 $$;

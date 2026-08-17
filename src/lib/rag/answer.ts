@@ -110,6 +110,32 @@ EXACTAMENTE estas claves:
   "sources": [{ "source_index": numero de la fuente citada, "quote": "cita textual exacta" }]
 }`;
 
+/**
+ * Presupuesto de contexto para el respaldo (Groq nivel gratuito: 8000
+ * tokens/minuto contando entrada + salida). ~4 caracteres por token, y se
+ * dejan ~2500 tokens de margen para las instrucciones y la respuesta.
+ */
+const FALLBACK_CONTEXT_CHAR_BUDGET = 14000;
+
+/**
+ * IMPORTANTE: debe devolver siempre un PREFIJO del arreglo original. La
+ * validación de citas de abajo mapea `source_index` contra la lista
+ * completa (`chunks[source_index - 1]`), así que si aquí se reordenara o
+ * se saltaran fragmentos, las citas del respaldo apuntarían al fragmento
+ * equivocado y se descartarían todas.
+ */
+function trimChunksForFallback(chunks: RetrievedChunk[]): RetrievedChunk[] {
+  const kept: RetrievedChunk[] = [];
+  let used = 0;
+  for (const chunk of chunks) {
+    if (used + chunk.content.length > FALLBACK_CONTEXT_CHAR_BUDGET) break;
+    kept.push(chunk);
+    used += chunk.content.length;
+  }
+  // Siempre al menos un fragmento, aunque por sí solo exceda el presupuesto.
+  return kept.length > 0 ? kept : chunks.slice(0, 1);
+}
+
 function buildContextBlock(chunks: RetrievedChunk[], documentTitles: Map<string, string>): string {
   return chunks
     .map((c, i) => {
@@ -161,23 +187,37 @@ async function callGroq(prompt: string): Promise<RawModelResult> {
   }
 
   const client = getGroqClient();
-  const completion = await client.chat.completions.create({
-    model: groqConfig.model,
-    messages: [{ role: 'user', content: prompt + GROQ_JSON_INSTRUCTIONS }],
-    response_format: { type: 'json_object' },
-  });
+  const models = groqConfig.models();
+  let lastError: unknown;
 
-  const raw = completion.choices[0]?.message?.content;
-  if (!raw) throw new Error('Groq no devolvió contenido');
+  // Se recorre la cascada de modelos: Groq retira modelos sin aviso, y
+  // que uno esté descontinuado no debe tumbar el respaldo entero.
+  for (const model of models) {
+    try {
+      const completion = await client.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt + GROQ_JSON_INSTRUCTIONS }],
+        response_format: { type: 'json_object' },
+      });
 
-  const parsed = JSON.parse(raw) as Partial<Omit<RawModelResult, 'reasoning'>>;
-  return {
-    answer: parsed.answer ?? '',
-    found_in_documents: Boolean(parsed.found_in_documents),
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
-    sources: Array.isArray(parsed.sources) ? parsed.sources : [],
-    reasoning: null,
-  };
+      const raw = completion.choices[0]?.message?.content;
+      if (!raw) throw new Error('Groq no devolvió contenido');
+
+      const parsed = JSON.parse(raw) as Partial<Omit<RawModelResult, 'reasoning'>>;
+      return {
+        answer: parsed.answer ?? '',
+        found_in_documents: Boolean(parsed.found_in_documents),
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,
+        sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+        reasoning: null,
+      };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`ningún modelo de Groq respondió (probados: ${models.join(', ')}): ${message}`);
 }
 
 export async function generateAnswer(params: {
@@ -188,7 +228,6 @@ export async function generateAnswer(params: {
 }): Promise<AnswerResult> {
   const { question, chunks, documentTitles, conversationHistory } = params;
 
-  const contextBlock = buildContextBlock(chunks, documentTitles);
   const historyBlock =
     conversationHistory.length > 0
       ? `\n\n=== CONVERSACIÓN PREVIA (solo para contexto referencial) ===\n${conversationHistory
@@ -196,13 +235,16 @@ export async function generateAnswer(params: {
           .join('\n')}`
       : '';
 
-  const prompt = `${SYSTEM_INSTRUCTIONS}${historyBlock}
+  const buildPrompt = (forChunks: RetrievedChunk[]) =>
+    `${SYSTEM_INSTRUCTIONS}${historyBlock}
 
 === CONTEXTO DOCUMENTAL ===
-${contextBlock}
+${buildContextBlock(forChunks, documentTitles)}
 === FIN DEL CONTEXTO DOCUMENTAL ===
 
 Pregunta del usuario: ${question}`;
+
+  const prompt = buildPrompt(chunks);
 
   let parsed: RawModelResult;
   let usedFallbackProvider = false;
@@ -210,7 +252,11 @@ Pregunta del usuario: ${question}`;
     parsed = await callGemini(prompt);
   } catch (geminiErr) {
     try {
-      parsed = await callGroq(prompt);
+      // El nivel gratuito de Groq limita a 8000 tokens por minuto, muy por
+      // debajo de lo que admite Gemini: el contexto completo (14
+      // fragmentos) lo excede y devuelve 413. Para el respaldo se recorta
+      // a los fragmentos mejor puntuados que quepan en ese presupuesto.
+      parsed = await callGroq(buildPrompt(trimChunksForFallback(chunks)));
       usedFallbackProvider = true;
     } catch (groqErr) {
       const geminiMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
