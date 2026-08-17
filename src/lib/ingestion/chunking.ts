@@ -25,6 +25,12 @@ const SECTION_RE = /^(secci[oó]n|section)\s+([0-9]+(\.[0-9]+)*)\b.*/i;
 
 const TARGET_TOKENS = 600;
 const MAX_TOKENS = 900;
+/**
+ * Un chunk por debajo de esto casi siempre es solo un título suelto: no
+ * sirve para responder y contamina la búsqueda. Se fusiona con el
+ * siguiente en vez de indexarse por separado.
+ */
+const MIN_CHUNK_CHARS = 200;
 
 function estimateTokens(text: string): number {
   const words = text.trim().split(/\s+/).filter(Boolean).length;
@@ -117,9 +123,18 @@ function resolveContentType(blocks: Block[]): ChunkContentType {
 
 /**
  * Agrupa bloques (párrafos/encabezados) en chunks semánticos: nunca corta
- * un párrafo a la mitad, y siempre abre un chunk nuevo al cambiar de
- * capítulo/sección, aunque el chunk anterior no haya llegado al tamaño
- * objetivo.
+ * un párrafo a la mitad, y abre un chunk nuevo al cambiar de
+ * capítulo/sección -- pero solo si lo acumulado ya tiene contenido real.
+ *
+ * Los documentos reales (manuales, normativas) tienen muchas líneas en
+ * MAYÚSCULAS seguidas: portadas, índices, encabezados de sección. Cada
+ * una se detecta como encabezado y cambia la "sección" actual, así que
+ * sin el mínimo de abajo cada título terminaba en su propio chunk
+ * diminuto ("VALIDACION", "PROCESS VALIDATION"). Esos chunks son basura
+ * para responder pero ganaban la búsqueda vectorial -- un chunk de dos
+ * palabras idénticas a la pregunta tiene similitud altísima -- y
+ * desplazaban al contenido real. Verificado en producción: el 5% de los
+ * chunks tenía menos de 60 caracteres y copaban los primeros puestos.
  */
 export function chunkPages(pages: PageForChunking[]): ChunkDraft[] {
   const blocks = splitIntoBlocks(pages).filter((b) => b.kind === 'paragraph' || b.text.length > 0);
@@ -152,8 +167,13 @@ export function chunkPages(pages: PageForChunking[]): ChunkDraft[] {
   let lastSection: string | null = null;
 
   for (const block of blocks) {
+    const currentChars = current.reduce((sum, b) => sum + b.text.length, 0);
+    // Un cambio de sección solo corta si lo acumulado ya es un chunk
+    // útil; si no, el encabezado se queda junto al contenido que le sigue.
     const boundaryChanged =
-      current.length > 0 && (block.chapter !== lastChapter || block.section !== lastSection);
+      current.length > 0 &&
+      currentChars >= MIN_CHUNK_CHARS &&
+      (block.chapter !== lastChapter || block.section !== lastSection);
     const blockTokens = estimateTokens(block.text);
 
     if (boundaryChanged || (currentTokens + blockTokens > MAX_TOKENS && current.length > 0)) {
@@ -173,5 +193,55 @@ export function chunkPages(pages: PageForChunking[]): ChunkDraft[] {
   }
   flush();
 
-  return chunks;
+  return mergeTinyChunks(chunks);
+}
+
+/**
+ * Red de seguridad: fusiona cualquier chunk que quedó por debajo del
+ * mínimo con el siguiente (o con el anterior, si era el último). Así se
+ * garantiza que ningún título suelto llegue al índice, sin importar cómo
+ * venga estructurado el documento.
+ */
+function mergeTinyChunks(chunks: ChunkDraft[]): ChunkDraft[] {
+  if (chunks.length <= 1) return chunks;
+
+  const merged: ChunkDraft[] = [];
+  let pending: ChunkDraft | null = null;
+
+  for (const chunk of chunks) {
+    const combined: ChunkDraft = pending ? joinChunks(pending, chunk) : chunk;
+    if (combined.content.trim().length < MIN_CHUNK_CHARS) {
+      pending = combined;
+      continue;
+    }
+    merged.push(combined);
+    pending = null;
+  }
+
+  // Sobró un chunk diminuto al final: se pega al último ya emitido.
+  if (pending) {
+    if (merged.length > 0) {
+      merged[merged.length - 1] = joinChunks(merged[merged.length - 1], pending);
+    } else {
+      merged.push(pending);
+    }
+  }
+
+  return merged.map((c, i) => ({ ...c, position: i }));
+}
+
+function joinChunks(a: ChunkDraft, b: ChunkDraft): ChunkDraft {
+  const content = `${a.content}\n\n${b.content}`;
+  return {
+    pageStart: Math.min(a.pageStart, b.pageStart),
+    pageEnd: Math.max(a.pageEnd, b.pageEnd),
+    // Se conserva la ubicación del bloque con contenido real (el segundo).
+    chapter: b.chapter ?? a.chapter,
+    section: b.section ?? a.section,
+    contentType: a.contentType === b.contentType ? a.contentType : 'mixed',
+    position: a.position,
+    content,
+    contentHash: createHash('sha256').update(content).digest('hex'),
+    tokenCount: a.tokenCount + b.tokenCount,
+  };
 }

@@ -14,11 +14,16 @@ export interface RetrievedChunk {
   vectorSimilarity: number | null;
 }
 
-const VECTOR_MATCH_COUNT = 12;
-const FTS_MATCH_COUNT = 12;
+// Se recupera de más para que el modelo tenga material suficiente con
+// que razonar (antes 12/12 -> 10 finales resultaba demasiado justo en
+// documentos largos, y una sola pregunta podía quedarse sin el fragmento
+// que sí tenía la respuesta).
+const VECTOR_MATCH_COUNT = 20;
+const FTS_MATCH_COUNT = 20;
+const DEFAULT_MATCH_COUNT = 14;
 const RRF_K = 60;
 /** Umbral mínimo de similitud coseno para considerar un chunk "relevante". */
-const MIN_VECTOR_SIMILARITY = 0.5;
+const MIN_VECTOR_SIMILARITY = 0.45;
 
 interface RawMatch {
   chunk_id: string;
@@ -94,7 +99,7 @@ export async function hybridSearch(
       return similarity === undefined || similarity >= MIN_VECTOR_SIMILARITY;
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, options.matchCount ?? 10);
+    .slice(0, options.matchCount ?? DEFAULT_MATCH_COUNT);
 
   return ranked.map(({ match, score }) => ({
     chunkId: match.chunk_id,
