@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, User, X, Zap, History } from 'lucide-react';
+import { Send, Plus, BookOpen, ChevronDown, ChevronUp, Brain, X, Zap, History } from 'lucide-react';
 import { PdfViewerModal } from '@/components/viewer/PdfViewerModal';
 
 interface ChatSource {
@@ -259,7 +259,7 @@ export function ChatView() {
               <button
                 type="button"
                 onClick={(e) => handleDeleteConversation(c.id, e)}
-                className="shrink-0 rounded-md p-1 text-stone-400 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover/conv:opacity-100 dark:hover:bg-red-500/10"
+                className="shrink-0 rounded-md p-1 text-stone-400 opacity-100 hover:bg-red-50 hover:text-red-600 md:opacity-0 md:group-hover/conv:opacity-100 dark:hover:bg-red-500/10"
                 aria-label={`Eliminar conversación ${c.title ?? ''}`}
                 title="Eliminar conversación"
               >
@@ -306,13 +306,8 @@ export function ChatView() {
               {messages.map((m, i) =>
                 m.role === 'user' ? (
                   <div key={i} className="flex justify-end">
-                    <div className="flex max-w-[80%] items-start gap-2">
-                      <div className="rounded-2xl bg-stone-900 px-4 py-2.5 text-sm text-white dark:bg-stone-100 dark:text-stone-900">
-                        <p className="whitespace-pre-wrap">{m.content}</p>
-                      </div>
-                      <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-300">
-                        <User size={13} />
-                      </div>
+                    <div className="max-w-[80%] rounded-2xl bg-stone-900 px-4 py-2.5 text-sm text-white dark:bg-stone-100 dark:text-stone-900">
+                      <p className="whitespace-pre-wrap">{m.content}</p>
                     </div>
                   </div>
                 ) : (
