@@ -175,7 +175,7 @@ async function runExtractingPages(job: ProcessingJobRow): Promise<boolean> {
   const supabase = getSupabaseAdmin();
   const { data: document, error } = await supabase
     .from('documents')
-    .select('storage_path, page_count')
+    .select('storage_path, page_count, kind')
     .eq('id', job.document_id)
     .single();
   if (error || !document?.page_count) {
@@ -241,6 +241,24 @@ async function runExtractingPages(job: ProcessingJobRow): Promise<boolean> {
 
   const progress = Math.round((batchEnd / document.page_count) * 70);
   const finishedExtraction = batchEnd >= document.page_count;
+
+  // Un documento de análisis solo necesita su TEXTO (de ahí se extraen
+  // las afirmaciones a contrastar); nunca se consulta como fuente, así
+  // que fragmentarlo y generar sus embeddings sería gastar cuota de
+  // Gemini para nada.
+  const skipsIndexing = document.kind === 'analysis';
+
+  if (finishedExtraction && skipsIndexing) {
+    await supabase
+      .from('processing_jobs')
+      .update({ last_page_processed: batchEnd, current_stage: 'done', status: 'completed' })
+      .eq('id', job.id);
+    await supabase
+      .from('documents')
+      .update({ status: 'ready', processing_progress: 100 })
+      .eq('id', job.document_id);
+    return true;
+  }
 
   await supabase
     .from('processing_jobs')

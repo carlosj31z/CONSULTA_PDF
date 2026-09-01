@@ -1,11 +1,12 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Library, MessageSquare, FolderOpen, Star, BookOpen, X } from 'lucide-react';
+import { Library, MessageSquare, FolderOpen, Star, BookOpen, X, ClipboardCheck } from 'lucide-react';
 
 const NAV_ITEMS = [
   { label: 'Biblioteca', icon: Library, href: '/' },
   { label: 'Consulta', icon: MessageSquare, href: '/chat' },
+  { label: 'Análisis', icon: ClipboardCheck, href: '/analysis' },
   { label: 'Colecciones', icon: FolderOpen, href: '/collections' },
   { label: 'Favoritos', icon: Star, href: '/favorites' },
 ];

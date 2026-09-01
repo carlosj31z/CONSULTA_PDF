@@ -10,9 +10,12 @@ import {
 
 export async function GET() {
   const supabase = getSupabaseAdmin();
+  // Solo documentos de biblioteca: los informes a analizar viven en su
+  // propia sección y no deben aparecer aquí.
   const { data, error } = await supabase
     .from('documents')
     .select('*')
+    .eq('kind', 'library')
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -27,6 +30,7 @@ const initiateUploadSchema = z.object({
   fileHash: z.string().regex(/^[a-f0-9]{64}$/, 'fileHash debe ser un sha256 hex'),
   mimeType: z.string(),
   sizeBytes: z.number().int().positive(),
+  kind: z.enum(['library', 'analysis']).optional(),
 });
 
 export async function POST(request: Request) {
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { filename, fileHash, mimeType, sizeBytes } = parsed.data;
+  const { filename, fileHash, mimeType, sizeBytes, kind = 'library' } = parsed.data;
 
   if (!ALLOWED_MIME_TYPES.includes(mimeType as (typeof ALLOWED_MIME_TYPES)[number])) {
     return NextResponse.json(
@@ -78,6 +82,7 @@ export async function POST(request: Request) {
       mime_type: mimeType,
       file_size_bytes: sizeBytes,
       status: 'pending',
+      kind,
     })
     .select('*')
     .single();

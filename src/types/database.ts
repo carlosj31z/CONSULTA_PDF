@@ -11,6 +11,13 @@ export type ChunkContentType = 'text' | 'table' | 'image' | 'formula' | 'mixed';
 export type ConversationScopeType = 'library' | 'document' | 'documents' | 'collection';
 export type MessageRole = 'user' | 'assistant';
 
+/** 'library' = fuente consultable; 'analysis' = documento a contrastar. */
+export type DocumentKind = 'library' | 'analysis';
+export type AnalysisStatus = 'pending' | 'extracting_claims' | 'verifying' | 'ready' | 'error';
+export type ClaimVerdict = 'pending' | 'supported' | 'refuted' | 'partial' | 'not_found';
+export type ClaimUserVerdict = Exclude<ClaimVerdict, 'pending'>;
+export type ClaimSourceStance = 'supports' | 'refutes' | 'context';
+
 export interface CollectionRow {
   id: string;
   name: string;
@@ -31,8 +38,48 @@ export interface DocumentRow {
   processing_progress: number;
   processing_error: string | null;
   is_favorite: boolean;
+  kind: DocumentKind;
   created_at: string;
   updated_at: string;
+}
+
+export interface AnalysisRow {
+  id: string;
+  document_id: string;
+  status: AnalysisStatus;
+  progress: number;
+  error_message: string | null;
+  last_page_processed: number;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnalysisClaimRow {
+  id: string;
+  analysis_id: string;
+  claim_text: string;
+  page_number: number | null;
+  position: number;
+  verdict: ClaimVerdict;
+  explanation: string | null;
+  confidence: number | null;
+  user_verdict: ClaimUserVerdict | null;
+  user_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnalysisClaimSourceRow {
+  id: string;
+  claim_id: string;
+  analysis_id: string;
+  document_id: string;
+  chunk_id: string | null;
+  page_number: number;
+  quote: string;
+  stance: ClaimSourceStance;
+  created_at: string;
 }
 
 export interface ProcessingJobRow {
